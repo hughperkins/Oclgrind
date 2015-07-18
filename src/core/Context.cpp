@@ -40,7 +40,8 @@ using namespace std;
 
 Context::Context()
 {
-  m_globalMemory = new Memory(AddrSpaceGlobal, this);
+  m_globalMemory = new Memory(AddrSpaceGlobal, sizeof(size_t)==8 ? 16 : 8,
+                              this);
   m_kernelInvocation = NULL;
 
   loadPlugins();
@@ -314,7 +315,7 @@ void Context::notifyMessage(MessageType type, const char *message) const
 }
 
 void Context::notifyMemoryUnmap(const Memory *memory, size_t address,
-                                void *ptr) const
+                                const void *ptr) const
 {
   NOTIFY(memoryUnmap, memory, address, ptr);
 }

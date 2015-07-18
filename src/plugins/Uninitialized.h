@@ -18,6 +18,9 @@ namespace oclgrind
     virtual void hostMemoryStore(const Memory *memory,
                                  size_t address, size_t size,
                                  const uint8_t *storeData) override;
+    virtual void instructionExecuted(const WorkItem *workItem,
+                                     const llvm::Instruction *instruction,
+                                     const TypedValue& result) override;
     virtual void memoryAllocated(const Memory *memory, size_t address,
                                  size_t size, cl_mem_flags flags,
                                  const uint8_t *initData) override;
@@ -30,13 +33,13 @@ namespace oclgrind
                                    AtomicOp op,
                                    size_t address, size_t size) override;
     virtual void memoryDeallocated(const Memory *memory, size_t address);
-    virtual void memoryMap(const Memory *memory, size_t address,
-                           size_t offset, size_t size,
-                           cl_map_flags flags) override;
     virtual void memoryLoad(const Memory *memory, const WorkItem *workItem,
                             size_t address, size_t size) override;
     virtual void memoryLoad(const Memory *memory, const WorkGroup *workGroup,
                             size_t address, size_t size) override;
+    virtual void memoryMap(const Memory *memory, size_t address,
+                           size_t offset, size_t size,
+                           cl_map_flags flags) override;
     virtual void memoryStore(const Memory *memory, const WorkItem *workItem,
                              size_t address, size_t size,
                              const uint8_t *storeData) override;
@@ -45,8 +48,14 @@ namespace oclgrind
                              const uint8_t *storeData) override;
 
   private:
-    typedef std::map< std::pair<const Memory*, size_t>, bool* > StateMap;
-    StateMap m_state;
+    typedef std::map<size_t, bool*> StateMap;
+    StateMap m_globalState;
+
+    struct LocalState
+    {
+      std::map<const Memory*,StateMap> *state;
+    };
+    static THREAD_LOCAL LocalState m_localState;
 
     void checkState(const Memory *memory, size_t address, size_t size) const;
     void setState(const Memory *memory, size_t address, size_t size);

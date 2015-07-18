@@ -67,7 +67,8 @@ WorkItem::WorkItem(const KernelInvocation *kernelInvocation,
   // Set initial number of values to store based on cache
   m_values.resize(m_cache->getNumValues());
 
-  m_privateMemory = new Memory(AddrSpacePrivate, m_context);
+  m_privateMemory = new Memory(AddrSpacePrivate, sizeof(size_t)==8 ? 32 : 16,
+                               m_context);
 
   // Initialise kernel arguments and global variables
   for (auto value  = kernel->values_begin();
@@ -1660,57 +1661,4 @@ void InterpreterCache::addOperand(const llvm::Value *operand)
       // TODO: Resolve actual value?
     }
   }
-}
-
-
-//////////////////////////
-// WorkItem::MemoryPool //
-//////////////////////////
-
-WorkItem::MemoryPool::MemoryPool(size_t blockSize) : m_blockSize(blockSize)
-{
-  // Force first allocation to create new block
-  m_offset = m_blockSize;
-}
-
-WorkItem::MemoryPool::~MemoryPool()
-{
-  list<unsigned char*>::iterator itr;
-  for (itr = m_blocks.begin(); itr != m_blocks.end(); itr++)
-  {
-    delete[] *itr;
-  }
-}
-
-unsigned char* WorkItem::MemoryPool::alloc(size_t size)
-{
-  // Check if requested size larger than block size
-  if (size > m_blockSize)
-  {
-    // Oversized buffers allocated separately from main pool
-    unsigned char *buffer = new unsigned char[size];
-    m_blocks.push_back(buffer);
-    return buffer;
-  }
-
-  // Check if enough space in current block
-  if (m_offset + size > m_blockSize)
-  {
-    // Allocate new block
-    m_blocks.push_front(new unsigned char[m_blockSize]);
-    m_offset = 0;
-  }
-  unsigned char *buffer = m_blocks.front() + m_offset;
-  m_offset += size;
-  return buffer;
-}
-
-TypedValue WorkItem::MemoryPool::clone(const TypedValue& source)
-{
-  TypedValue dest;
-  dest.size = source.size;
-  dest.num = source.num;
-  dest.data = alloc(dest.size*dest.num);
-  memcpy(dest.data, source.data, dest.size*dest.num);
-  return dest;
 }

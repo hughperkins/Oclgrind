@@ -451,14 +451,22 @@ Program* Program::createFromBitcode(const Context *context,
   }
 
   // Parse bitcode into IR module
+#if LLVM_VERSION < 37
   llvm::ErrorOr<llvm::Module*> module =
+#else
+  llvm::ErrorOr<unique_ptr<llvm::Module>> module =
+#endif
     parseBitcodeFile(buffer->getMemBufferRef(), llvm::getGlobalContext());
   if (!module)
   {
     return NULL;
   }
 
+#if LLVM_VERSION < 37
   return new Program(context, module.get());
+#else
+  return new Program(context, module.get().get());
+#endif
 }
 
 Program* Program::createFromBitcodeFile(const Context *context,
@@ -473,7 +481,11 @@ Program* Program::createFromBitcodeFile(const Context *context,
   }
 
   // Parse bitcode into IR module
+#if LLVM_VERSION < 37
   llvm::ErrorOr<llvm::Module*> module =
+#else
+  llvm::ErrorOr<unique_ptr<llvm::Module>> module =
+#endif
     parseBitcodeFile(buffer->get()->getMemBufferRef(),
                      llvm::getGlobalContext());
   if (!module)
@@ -481,7 +493,11 @@ Program* Program::createFromBitcodeFile(const Context *context,
     return NULL;
   }
 
+#if LLVM_VERSION < 37
   return new Program(context, module.get());
+#else
+  return new Program(context, module.get().get());
+#endif
 }
 
 Program* Program::createFromPrograms(const Context *context,
@@ -569,20 +585,17 @@ Kernel* Program::createKernel(const string name)
   }
 }
 
-unsigned char* Program::getBinary() const
+void Program::getBinary(unsigned char *binary) const
 {
   if (!m_module)
-  {
-    return NULL;
-  }
+    return;
 
   std::string str;
   llvm::raw_string_ostream stream(str);
   llvm::WriteBitcodeToFile(m_module.get(), stream);
   stream.str();
-  unsigned char *bitcode = new unsigned char[str.length()];
-  memcpy(bitcode, str.c_str(), str.length());
-  return bitcode;
+
+  memcpy(binary, str.c_str(), str.length());
 }
 
 size_t Program::getBinarySize() const

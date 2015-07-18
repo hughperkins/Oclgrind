@@ -8,16 +8,6 @@
 
 #include "common.h"
 
-#define NUM_BUFFER_BITS ( (sizeof(size_t)==4) ? 8 : 16)
-#define MAX_NUM_BUFFERS ((size_t)1 << NUM_BUFFER_BITS)
-#define NUM_ADDRESS_BITS ((sizeof(size_t)<<3) - NUM_BUFFER_BITS)
-#define MAX_BUFFER_SIZE ((size_t)1 << NUM_ADDRESS_BITS)
-
-#define EXTRACT_BUFFER(address) \
-  (address >> NUM_ADDRESS_BITS)
-#define EXTRACT_OFFSET(address) \
-  (address & (((size_t)-1) >> NUM_BUFFER_BITS))
-
 namespace oclgrind
 {
   class Context;
@@ -25,15 +15,15 @@ namespace oclgrind
   class Memory
   {
   public:
-    typedef struct
+    struct Buffer
     {
       size_t size;
       cl_mem_flags flags;
       unsigned char *data;
-    } Buffer;
+    };
 
   public:
-    Memory(unsigned int addrSpace, const Context *context);
+    Memory(unsigned addrSpace, unsigned bufferBits, const Context *context);
     virtual ~Memory();
 
     size_t allocateBuffer(size_t size, cl_mem_flags flags=0,
@@ -51,10 +41,13 @@ namespace oclgrind
     size_t getTotalAllocated() const;
     bool isAddressValid(size_t address, size_t size=1) const;
     bool load(unsigned char *dst, size_t address, size_t size=1) const;
-    unsigned char* mapBuffer(size_t address, size_t offset, size_t size);
+    void* mapBuffer(size_t address, size_t offset, size_t size);
     bool store(const unsigned char *source, size_t address, size_t size=1);
 
-    static size_t getMaxAllocSize();
+    size_t extractBuffer(size_t address) const;
+    size_t extractOffset(size_t address) const;
+
+    size_t getMaxAllocSize();
 
   private:
     const Context *m_context;
@@ -62,6 +55,11 @@ namespace oclgrind
     std::vector<Buffer*> m_memory;
     unsigned int m_addressSpace;
     size_t m_totalAllocated;
+
+    unsigned m_numBitsBuffer;
+    unsigned m_numBitsAddress;
+    size_t m_maxNumBuffers;
+    size_t m_maxBufferSize;
 
     unsigned getNextBuffer();
   };

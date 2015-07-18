@@ -10,6 +10,10 @@
 
 #include "core/Context.h"
 #include "core/Memory.h"
+#include "core/WorkItem.h"
+
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Type.h"
 
 #include "MemCheck.h"
 
@@ -19,6 +23,49 @@ using namespace std;
 MemCheck::MemCheck(const Context *context)
  : Plugin(context)
 {
+}
+
+void MemCheck::instructionExecuted(const WorkItem *workItem,
+                                   const llvm::Instruction *instruction,
+                                   const TypedValue& result)
+{
+  if (auto gep = llvm::dyn_cast<llvm::GetElementPtrInst>(instruction))
+  {
+    // Iterate through GEP indices
+    const llvm::Type *ptrType = gep->getPointerOperandType();
+    for (auto opIndex = gep->idx_begin(); opIndex != gep->idx_end(); opIndex++)
+    {
+      int64_t index = workItem->getOperand(opIndex->get()).getSInt();
+
+      if (ptrType->isArrayTy())
+      {
+        // Check index doesn't exceed size of array
+        uint64_t size = ptrType->getArrayNumElements();
+        if ((uint64_t)index >= size)
+        {
+          ostringstream info;
+          info << "Index ("
+               << index << ") exceeds static array size ("
+               << size << ")";
+          m_context->logError(info.str().c_str());
+        }
+
+        ptrType = ptrType->getArrayElementType();
+      }
+      else if (ptrType->isPointerTy())
+      {
+        ptrType = ptrType->getPointerElementType();
+      }
+      else if (ptrType->isVectorTy())
+      {
+        ptrType = ptrType->getVectorElementType();
+      }
+      else if (ptrType->isStructTy())
+      {
+        ptrType = ptrType->getStructElementType(index);
+      }
+    }
+  }
 }
 
 void MemCheck::memoryAtomicLoad(const Memory *memory,
@@ -47,6 +94,17 @@ void MemCheck::memoryLoad(const Memory *memory, const WorkGroup *workGroup,
   checkLoad(memory, address, size);
 }
 
+void MemCheck::memoryMap(const Memory *memory, size_t address,
+                         size_t offset, size_t size, cl_map_flags flags)
+{
+  MapRegion map =
+  {
+    address, offset, size, memory->getPointer(address + offset),
+    (flags == CL_MAP_READ ? MapRegion::READ : MapRegion::WRITE)
+  };
+  m_mapRegions.push_back(map);
+}
+
 void MemCheck::memoryStore(const Memory *memory, const WorkItem *workItem,
                            size_t address, size_t size,
                            const uint8_t *storeData)
@@ -59,6 +117,21 @@ void MemCheck::memoryStore(const Memory *memory, const WorkGroup *workGroup,
                            const uint8_t *storeData)
 {
   checkStore(memory, address, size);
+}
+
+void MemCheck::memoryUnmap(const Memory *memory, size_t address,
+                           const void *ptr)
+{
+  for (auto region = m_mapRegions.begin();
+            region != m_mapRegions.end();
+            region++)
+  {
+    if (region->ptr == ptr)
+    {
+      m_mapRegions.erase(region);
+      return;
+    }
+  }
 }
 
 void MemCheck::checkLoad(const Memory *memory,
@@ -74,6 +147,19 @@ void MemCheck::checkLoad(const Memory *memory,
   {
     m_context->logError("Invalid read from write-only buffer");
   }
+
+  // Check if memory location is currently mapped for writing
+  for (auto region = m_mapRegions.begin();
+            region != m_mapRegions.end();
+            region++)
+  {
+    if (region->type == MapRegion::WRITE &&
+        address < region->address + region->size &&
+        address + size >= region->address)
+    {
+      m_context->logError("Invalid read from buffer mapped for writing");
+    }
+  }
 }
 
 void MemCheck::checkStore(const Memory *memory,
@@ -88,6 +174,18 @@ void MemCheck::checkStore(const Memory *memory,
   if (memory->getBuffer(address)->flags & CL_MEM_READ_ONLY)
   {
     m_context->logError("Invalid write to read-only buffer");
+  }
+
+  // Check if memory location is currently mapped
+  for (auto region = m_mapRegions.begin();
+            region != m_mapRegions.end();
+            region++)
+  {
+    if (address < region->address + region->size &&
+        address + size >= region->address)
+    {
+      m_context->logError("Invalid write to mapped buffer");
+    }
   }
 }
 

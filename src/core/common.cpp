@@ -24,19 +24,19 @@ using namespace std;
 
 namespace oclgrind
 {
-  _Size3_::_Size3_()
+  Size3::Size3()
   {
     x = y = z = 0;
   }
 
-  _Size3_::_Size3_(size_t _x, size_t _y, size_t _z)
+  Size3::Size3(size_t _x, size_t _y, size_t _z)
   {
     x = _x;
     y = _y;
     z = _z;
   }
 
-  _Size3_::_Size3_(size_t linear, _Size3_ dimensions)
+  Size3::Size3(size_t linear, Size3 dimensions)
   {
     x = linear % dimensions.x;
     y = (linear / dimensions.x) % dimensions.y;
@@ -76,6 +76,11 @@ namespace oclgrind
   bool Size3::operator==(const Size3& rhs) const
   {
     return x == rhs.x && y == rhs.y && z == rhs.z;
+  }
+
+  bool Size3::operator!=(const Size3& rhs) const
+  {
+    return x != rhs.x || y != rhs.y || z != rhs.z;
   }
 
   ostream& operator<<(ostream& stream, const Size3& size)
@@ -708,5 +713,52 @@ namespace oclgrind
   const char* FatalError::what() const throw()
   {
     return runtime_error::what();
+  }
+
+  MemoryPool::MemoryPool(size_t blockSize) : m_blockSize(blockSize)
+  {
+    // Force first allocation to create new block
+    m_offset = m_blockSize;
+  }
+
+  MemoryPool::~MemoryPool()
+  {
+    for (auto itr = m_blocks.begin(); itr != m_blocks.end(); itr++)
+    {
+      delete[] *itr;
+    }
+  }
+
+  uint8_t* MemoryPool::alloc(size_t size)
+  {
+    // Check if requested size larger than block size
+    if (size > m_blockSize)
+    {
+      // Oversized buffers allocated separately from main pool
+      unsigned char *buffer = new unsigned char[size];
+      m_blocks.push_back(buffer);
+      return buffer;
+    }
+
+    // Check if enough space in current block
+    if (m_offset + size > m_blockSize)
+    {
+      // Allocate new block
+      m_blocks.push_front(new unsigned char[m_blockSize]);
+      m_offset = 0;
+    }
+    uint8_t *buffer = m_blocks.front() + m_offset;
+    m_offset += size;
+    return buffer;
+  }
+
+  TypedValue MemoryPool::clone(const TypedValue& source)
+  {
+    TypedValue dest;
+    dest.size = source.size;
+    dest.num = source.num;
+    dest.data = alloc(dest.size*dest.num);
+    memcpy(dest.data, source.data, dest.size*dest.num);
+    return dest;
   }
 }

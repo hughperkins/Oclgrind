@@ -27,7 +27,7 @@ using namespace std;
 #define MAX_GLOBAL_MEM_SIZE      (128 * 1048576)
 #define MAX_CONSTANT_BUFFER_SIZE (1048576)
 #define MAX_LOCAL_MEM_SIZE       (32768)
-#define MAX_WI_SIZE              (65536)
+#define MAX_WI_SIZE              (1024)
 
 #define PLATFORM_NAME       "Oclgrind"
 #define PLATFORM_VENDOR     "University of Bristol"
@@ -746,8 +746,10 @@ clGetDeviceInfo
     }
     else
     {
-      const void* src = str ? (const void*)str : (const void*)&result_data;
-      memcpy(param_value, src, result_size);
+      if (str)
+        memcpy(param_value, str, result_size);
+      else
+        memcpy(param_value, &result_data, result_size);
     }
   }
 
@@ -1698,7 +1700,7 @@ clGetSupportedImageFormats
     sizeof(ordersAll)        / sizeof(cl_channel_order),
     sizeof(ordersNormalized) / sizeof(cl_channel_order),
     sizeof(ordersByte)       / sizeof(cl_channel_order),
-    //sizeof(ordersPacked)     / sizeof(cl_channel_order),
+    sizeof(ordersPacked)     / sizeof(cl_channel_order),
   };
 
   // Channel types
@@ -1734,7 +1736,7 @@ clGetSupportedImageFormats
     sizeof(typesAll)        / sizeof(cl_channel_order),
     sizeof(typesNormalized) / sizeof(cl_channel_order),
     sizeof(typesByte)       / sizeof(cl_channel_order),
-    //sizeof(typesPacked)     / sizeof(cl_channel_order),
+    sizeof(typesPacked)     / sizeof(cl_channel_order),
   };
 
   // Calculate total number of formats
@@ -2554,9 +2556,6 @@ clGetProgramInfo
   size_t *         param_value_size_ret
 ) CL_API_SUFFIX__VERSION_1_0
 {
-  size_t result_size = 0;
-  void *result_data = NULL;
-
   // Check program is valid
   if (!program)
   {
@@ -2570,100 +2569,92 @@ clGetProgramInfo
                     "Program not successfully built");
   }
 
+  size_t dummy;
+  size_t& result_size = param_value_size_ret ? *param_value_size_ret : dummy;
+  union
+  {
+    cl_uint cluint;
+    cl_device_id device;
+    cl_context context;
+    size_t sizet;
+  } result_data;
+  const char* str = 0;
+  string kernelNames;
+
   switch (param_name)
   {
   case CL_PROGRAM_REFERENCE_COUNT:
     result_size = sizeof(cl_uint);
-    result_data = malloc(result_size);
-    *(cl_uint*)result_data = program->refCount;
+    result_data.cluint = program->refCount;
     break;
   case CL_PROGRAM_CONTEXT:
     result_size = sizeof(cl_context);
-    result_data = malloc(result_size);
-    *(cl_context*)result_data = program->context;
+    result_data.context = program->context;
     break;
   case CL_PROGRAM_NUM_DEVICES:
     result_size = sizeof(cl_uint);
-    result_data = malloc(result_size);
-    *(cl_uint*)result_data = 1;
+    result_data.cluint = 1;
     break;
   case CL_PROGRAM_DEVICES:
     result_size = sizeof(cl_device_id);
-    result_data = malloc(result_size);
-    *(cl_device_id*)result_data = m_device;
+    result_data.device = m_device;
     break;
   case CL_PROGRAM_SOURCE:
-    result_size = strlen(program->program->getSource().c_str()) + 1;
-    result_data = malloc(result_size);
-    strcpy((char*)result_data, program->program->getSource().c_str());
+    str = program->program->getSource().c_str();
+    result_size = strlen(str) + 1;
     break;
   case CL_PROGRAM_BINARY_SIZES:
     result_size = sizeof(size_t);
-    result_data = malloc(result_size);
-    *(size_t*)result_data = program->program->getBinarySize();
+    result_data.sizet = program->program->getBinarySize();
     break;
   case CL_PROGRAM_BINARIES:
     result_size = sizeof(unsigned char*);
-    result_data = program->program->getBinary();
     break;
   case CL_PROGRAM_NUM_KERNELS:
     result_size = sizeof(size_t);
-    result_data = malloc(result_size);
-    *(size_t*)result_data = program->program->getNumKernels();
+    result_data.sizet = program->program->getNumKernels();
     break;
   case CL_PROGRAM_KERNEL_NAMES:
   {
     list<string> names = program->program->getKernelNames();
-    string ret;
     for (list<string>::iterator itr = names.begin(); itr != names.end(); itr++)
     {
-      ret += *itr;
-      ret += ";";
+      kernelNames += *itr;
+      kernelNames += ";";
     }
-    if (!ret.empty())
+    if (!kernelNames.empty())
     {
-      ret.erase(ret.length()-1);
+      kernelNames.erase(kernelNames.length()-1);
     }
-    result_size = strlen(ret.c_str()) + 1;
-    result_data = malloc(result_size);
-    strcpy((char*)result_data, ret.c_str());
+    str = kernelNames.c_str();
+    result_size = strlen(str) + 1;
     break;
   }
   default:
     ReturnErrorArg(program->context, CL_INVALID_VALUE, param_name);
   }
 
-  cl_int return_value = CL_SUCCESS;
   if (param_value)
   {
-    if (param_name == CL_PROGRAM_BINARIES)
+    // Check destination is large enough
+    if (param_value_size < result_size)
     {
-      memcpy(((unsigned char**)param_value)[0],
-             result_data, program->program->getBinarySize());
+      ReturnErrorInfo(NULL, CL_INVALID_VALUE, ParamValueSizeTooSmall);
+    }
+    else if (param_name == CL_PROGRAM_BINARIES)
+    {
+      program->program->getBinary(((unsigned char**)param_value)[0]);
     }
     else
     {
-      // Check destination is large enough
-      if (param_value_size < result_size)
-      {
-        // TODO: Use API error reporting mechanism
-        return_value = CL_INVALID_VALUE;
-      }
+      if (str)
+        memcpy(param_value, str, result_size);
       else
-      {
-        memcpy(param_value, result_data, result_size);
-      }
+        memcpy(param_value, &result_data, result_size);
     }
   }
 
-  if (param_value_size_ret)
-  {
-    *param_value_size_ret = result_size;
-  }
-
-  free(result_data);
-
-  return return_value;
+  return CL_SUCCESS;
 }
 
 CL_API_ENTRY cl_int CL_API_CALL
@@ -4250,7 +4241,8 @@ clEnqueueFillImage
       ((float*)color)[output] = ((float*)fill_color)[input];
       break;
     case CL_HALF_FLOAT:
-      ((uint16_t*)color)[output] = floatToHalf(((float*)fill_color)[input]);
+      ((uint16_t*)color)[output] =
+        oclgrind::floatToHalf(((float*)fill_color)[input]);
       break;
     case CL_SIGNED_INT8:
       ((int8_t*)color)[output] = ((int32_t*)fill_color)[input];
@@ -4873,6 +4865,8 @@ clEnqueueNDRangeKernel
   }
 
   // Check global and local sizes are valid
+  size_t reqdWorkGroupSize[3];
+  kernel->kernel->getRequiredWorkGroupSize(reqdWorkGroupSize);
   for (unsigned i = 0; i < work_dim; i++)
   {
     if (!global_work_size[i])
@@ -4883,10 +4877,17 @@ clEnqueueNDRangeKernel
     if (local_work_size && global_work_size[i] % local_work_size[i])
     {
       ReturnErrorInfo(command_queue->context, CL_INVALID_WORK_GROUP_SIZE,
-                      "Dimension " << i <<
-                      ": local_work_size (" << local_work_size[i] <<
-                      ") does not divide global_work_size (" <<
-                      global_work_size[i] << ")");
+                      "local_work_size[" << i << "]=" << local_work_size[i] <<
+                      " does not divide global_work_size[" << i << "]=" <<
+                      global_work_size[i]);
+    }
+    if (local_work_size && reqdWorkGroupSize[i] &&
+        local_work_size[i] != reqdWorkGroupSize[i])
+    {
+      ReturnErrorInfo(command_queue->context, CL_INVALID_WORK_GROUP_SIZE,
+                      "local_work_size[" << i << "]=" << local_work_size[i] <<
+                      " does not match reqd_work_group_size[" << i << "]=" <<
+                      reqdWorkGroupSize[i])
     }
   }
 

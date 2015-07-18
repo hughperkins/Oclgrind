@@ -14,7 +14,7 @@ AC_LANG(C++)
 AC_PROG_CXX
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile tests/Makefile])
 
 LT_INIT
 
@@ -28,18 +28,16 @@ oclgrind_extra_libs=
 AX_CHECK_COMPILE_FLAG([-std=c++11], [],
                       [AC_MSG_ERROR([C++11 support is required])])
 CXXFLAGS="$CXXFLAGS -std=c++11"
-CPPFLAGS="$CPPFLAGS -std=c++11"
 
-# --with-llvm option to specify root of LLVM/Clang installation
+
+# --with-llvm option to specify root of LLVM installation
 AC_ARG_WITH(
         llvm,
         [AS_HELP_STRING([--with-llvm],
-                       [directory containing LLVM/Clang installation])],
-        [AC_SUBST(clang, $withval/bin/clang)
-         AC_SUBST(llvm_config, $withval/bin/llvm-config)])
+                       [directory containing LLVM installation])],
+        [export PATH="$withval/bin:$PATH"])
 
-# Find LLVM/Clang binaries (assume on PATH if --with-llvm not used)
-AC_CHECK_PROG(clang, [clang], `which clang`)
+# Get path to llvm-config
 AC_CHECK_PROG(llvm_config, [llvm-config], `which llvm-config`)
 if test -z $llvm_config; then
   AC_MSG_ERROR([llvm-config not found (use --with-llvm=)])
@@ -61,17 +59,33 @@ AC_DEFINE_UNQUOTED([LLVM_VERSION],
 CPPFLAGS="$CPPFLAGS `$llvm_config --cppflags`"
 LDFLAGS="$LDFLAGS `$llvm_config --ldflags`"
 
-# Check for LLVM/Clang headers/libraries
-AC_CHECK_HEADERS(
-        [llvm/IR/Instruction.h clang/CodeGen/CodeGenAction.h],
-        [:],
-        [AC_MSG_ERROR([LLVM/Clang includes not found (use --with-llvm=)])])
 
+# --with-clang option to specify root of Clang installation
+AC_ARG_WITH(
+        clang,
+        [AS_HELP_STRING([--with-clang],
+                       [directory containing Clang installation])],
+        [export PATH="$withval/bin:$PATH"
+         CPPFLAGS="$CPPFLAGS -I$withval/include/"
+         LDFLAGS="$LDFLAGS -L$withval/lib/"])
+
+CPPFLAGS_old="$CPPFLAGS"
+CPPFLAGS="$CPPFLAGS -std=c++11"
+
+# Check for Clang binaries, headers and libraries
+AC_CHECK_PROG(clang, [clang], `which clang`)
+AC_CHECK_HEADERS(
+        [clang/CodeGen/CodeGenAction.h],
+        [:],
+        [AC_MSG_ERROR([Clang headers not found (use --with-clang=)])])
 AC_CHECK_LIB(
         [clangFrontend],
         [main],
         [:],
-        [AC_MSG_ERROR([Clang library not found (use --with-llvm)])])
+        [AC_MSG_ERROR([Clang libraries not found (use --with-clang)])])
+
+CPPFLAGS="$CPPFLAGS_old"
+
 
 # GNU readline library (for interactive debugger)
 AC_ARG_WITH(
@@ -120,10 +134,10 @@ KERNEL_TESTS=""
 KERNEL_TEST_INPUTS=""
 m4_foreach([name], m4_split(m4_include(tests/kernels/TESTS), m4_newline),
 [
-    KERNEL_TESTS="$KERNEL_TESTS tests/kernels/"name".sim"
-    KERNEL_TEST_INPUTS="$KERNEL_TEST_INPUTS tests/kernels/"name".sim"
-    KERNEL_TEST_INPUTS="$KERNEL_TEST_INPUTS tests/kernels/"name".cl"
-    KERNEL_TEST_INPUTS="$KERNEL_TEST_INPUTS tests/kernels/"name".ref"
+    KERNEL_TESTS="$KERNEL_TESTS kernels/"name".sim"
+    KERNEL_TEST_INPUTS="$KERNEL_TEST_INPUTS kernels/"name".sim"
+    KERNEL_TEST_INPUTS="$KERNEL_TEST_INPUTS kernels/"name".cl"
+    KERNEL_TEST_INPUTS="$KERNEL_TEST_INPUTS kernels/"name".ref"
 ])
 AC_SUBST(KERNEL_TESTS, $KERNEL_TESTS)
 AC_SUBST(KERNEL_TEST_INPUTS, $KERNEL_TEST_INPUTS)

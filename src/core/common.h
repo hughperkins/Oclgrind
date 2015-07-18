@@ -34,6 +34,16 @@
 #undef ERROR
 #endif
 
+#ifdef __APPLE__
+// TODO: Remove this when thread_local fixed on OS X
+#define THREAD_LOCAL __thread
+#elif defined(_WIN32) && !defined(__MINGW32__)
+// TODO: Remove this when thread_local fixed on Windows
+#define THREAD_LOCAL __declspec(thread)
+#else
+#define THREAD_LOCAL thread_local
+#endif
+
 #define CLK_NORMALIZED_COORDS_TRUE 0x0001
 
 #define CLK_ADDRESS_NONE 0x0000
@@ -96,26 +106,27 @@ namespace oclgrind
   };
 
   // 3-dimensional size
-  typedef struct _Size3_
+  struct Size3
   {
     size_t x, y, z;
-    _Size3_();
-    _Size3_(size_t x, size_t y, size_t z);
-    _Size3_(size_t linear, _Size3_ dimensions);
+    Size3();
+    Size3(size_t x, size_t y, size_t z);
+    Size3(size_t linear, Size3 dimensions);
     size_t& operator[](unsigned i);
     const size_t& operator[](unsigned i) const;
-    bool operator==(const _Size3_& rhs) const;
-    friend std::ostream& operator<<(std::ostream& stream, const _Size3_& sz);
-  } Size3;
+    bool operator==(const Size3& rhs) const;
+    bool operator!=(const Size3& rhs) const;
+    friend std::ostream& operator<<(std::ostream& stream, const Size3& sz);
+  };
 
   // Structure for a value with a size/type
-  struct _TypedValue_
+  struct TypedValue
   {
     unsigned size;
     unsigned num;
     unsigned char *data;
 
-    struct _TypedValue_ clone() const;
+    struct TypedValue clone() const;
 
     double   getFloat(unsigned index = 0) const;
     size_t   getPointer(unsigned index = 0) const;
@@ -127,7 +138,6 @@ namespace oclgrind
     void     setUInt(uint64_t value, unsigned index = 0);
 
   };
-  typedef _TypedValue_ TypedValue;
 
   // Private memory map type
   typedef std::map<const llvm::Value*,TypedValue> TypedValueMap;
@@ -207,6 +217,90 @@ namespace oclgrind
       delete[] str;                                      \
       throw FatalError(msg, __FILE__, __LINE__);         \
     }
+
+  class MemoryPool
+  {
+  public:
+    MemoryPool(size_t blockSize = 1024);
+    ~MemoryPool();
+    uint8_t* alloc(size_t size);
+    TypedValue clone(const TypedValue& source);
+  private:
+    size_t m_blockSize;
+    size_t m_offset;
+    std::list<uint8_t*> m_blocks;
+  };
+
+  // Pool allocator class for STL containers
+  template <class T,size_t BLOCKSIZE>
+  class PoolAllocator
+  {
+    template <typename U,size_t BS> friend class PoolAllocator;
+
+  public:
+    typedef T          value_type;
+    typedef T*         pointer;
+    typedef T&         reference;
+    typedef const T*   const_pointer;
+    typedef const T&   const_reference;
+    typedef size_t     size_type;
+    typedef ptrdiff_t  difference_type;
+
+    template<typename U>
+    struct rebind
+    {
+      typedef PoolAllocator<U,BLOCKSIZE> other;
+    };
+
+    PoolAllocator()
+    {
+      pool.reset(new MemoryPool(BLOCKSIZE));
+    }
+
+    PoolAllocator(const PoolAllocator& p)
+    {
+      this->pool = p.pool;
+    }
+
+    template<typename U>
+    PoolAllocator(const PoolAllocator<U,BLOCKSIZE>& p)
+    {
+      this->pool = p.pool;
+    }
+
+    pointer allocate(size_type n, const_pointer hint=0)
+    {
+      return (pointer)(pool->alloc(n*sizeof(value_type)));
+    }
+
+    void deallocate(pointer p, size_type n){}
+
+    template<class U, class... Args>
+    void construct(U *p, Args&&... args)
+    {
+      new ((void*)p) U(std::forward<Args>(args)...);
+    }
+
+    template<class U>
+    void destroy(U *p)
+    {
+      p->~U();
+    }
+
+    bool operator==(const PoolAllocator& p) const
+    {
+      return this->pool == p.pool;
+    }
+
+    bool operator!=(const PoolAllocator& p) const
+    {
+      return this->pool != p.pool;
+    }
+
+  private:
+    std::shared_ptr<MemoryPool> pool;
+  };
+
 }
 
 #endif // __common_h_

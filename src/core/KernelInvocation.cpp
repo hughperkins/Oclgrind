@@ -22,14 +22,6 @@
 using namespace oclgrind;
 using namespace std;
 
-// TODO: Remove this when thread_local fixed on OS X
-#ifdef __APPLE__
-#define THREAD_LOCAL __thread
-#elif defined(_WIN32) && !defined(__MINGW32__)
-#define THREAD_LOCAL __declspec(thread)
-#else
-#define THREAD_LOCAL thread_local
-#endif
 struct
 {
   WorkGroup *workGroup;
@@ -80,7 +72,8 @@ KernelInvocation::KernelInvocation(const Context *context, const Kernel *kernel,
     Size3 firstGroup(0, 0, 0);
     Size3 lastGroup(m_numGroups.x-1, m_numGroups.y-1, m_numGroups.z-1);
     m_workGroups.push_back(firstGroup);
-    m_workGroups.push_back(lastGroup);
+    if (lastGroup != firstGroup)
+      m_workGroups.push_back(lastGroup);
   }
   else
   {
@@ -166,7 +159,7 @@ void KernelInvocation::run(const Context *context, Kernel *kernel,
   catch (FatalError& err)
   {
     ostringstream info;
-    info << endl << "OCLGRIND FATAL ERROR "
+    info << "OCLGRIND FATAL ERROR "
          << "(" << err.getFile() << ":" << err.getLine() << ")"
          << endl << err.what()
          << endl << "When allocating kernel constants for '"
@@ -272,7 +265,7 @@ void KernelInvocation::runWorker()
   catch (FatalError& err)
   {
     ostringstream info;
-    info << endl << "OCLGRIND FATAL ERROR "
+    info << "OCLGRIND FATAL ERROR "
          << "(" << err.getFile() << ":" << err.getLine() << ")"
          << endl << err.what();
     m_context->logError(info.str().c_str());
@@ -324,6 +317,7 @@ bool KernelInvocation::switchWorkItem(const Size3 gid)
      if (group == *pItr)
      {
        workerState.workGroup = new WorkGroup(this, group);
+       m_context->notifyWorkGroupBegin(workerState.workGroup);
        found = true;
 
        // Re-order list of groups accordingly
