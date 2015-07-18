@@ -201,7 +201,8 @@ bool Program::build(const char *options, list<Header> headers)
   // Pre-compiled header
   char *pchdir = NULL;
   char *pch    = NULL;
-  if (!checkEnv("OCLGRIND_DISABLE_PCH") && !strcmp(clstd, "-cl-std=CL1.2"))
+  if (!checkEnv("OCLGRIND_DISABLE_PCH") &&
+      (!strcmp(clstd, "-cl-std=CL1.2") || !strcmp(clstd, "-cl-std=CL2.0")))
   {
     const char *pchdirOverride = getenv("OCLGRIND_PCH_DIR");
     if (pchdirOverride)
