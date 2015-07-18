@@ -223,10 +223,10 @@ target_link_libraries(oclgrind-kernel oclgrind)
 
 set(CLC_HEADERS
  ${CMAKE_BINARY_DIR}/include/oclgrind/clc.h
- ${CMAKE_BINARY_DIR}/include/oclgrind/clc1.2_32.pch
- ${CMAKE_BINARY_DIR}/include/oclgrind/clc1.2_64.pch
- ${CMAKE_BINARY_DIR}/include/oclgrind/clc2.0_32.pch
- ${CMAKE_BINARY_DIR}/include/oclgrind/clc2.0_64.pch
+ ${CMAKE_BINARY_DIR}/include/oclgrind/clc12_32.pch
+ ${CMAKE_BINARY_DIR}/include/oclgrind/clc12_64.pch
+ ${CMAKE_BINARY_DIR}/include/oclgrind/clc20_32.pch
+ ${CMAKE_BINARY_DIR}/include/oclgrind/clc20_64.pch
 )
 
 add_custom_target(CLC_HEADERS ALL DEPENDS ${CLC_HEADERS})
@@ -240,7 +240,7 @@ add_custom_command(
 
 # Generate precompiled headers for clc.h
 add_custom_command(
-  OUTPUT include/oclgrind/clc1.2_32.pch
+  OUTPUT include/oclgrind/clc12_32.pch
   POST_BUILD
   COMMAND
     ${CLANG}
@@ -248,11 +248,11 @@ add_custom_command(
     -emit-pch -triple spir-unknown-unknown
     -relocatable-pch -isysroot ${CMAKE_BINARY_DIR}/include/oclgrind/
     ${CMAKE_BINARY_DIR}/include/oclgrind/clc.h
-    -o include/oclgrind/clc1.2_32.pch
+    -o include/oclgrind/clc12_32.pch
   DEPENDS include/oclgrind/clc.h
 )
 add_custom_command(
-  OUTPUT include/oclgrind/clc1.2_64.pch
+  OUTPUT include/oclgrind/clc12_64.pch
   POST_BUILD
   COMMAND
     ${CLANG}
@@ -260,11 +260,11 @@ add_custom_command(
     -emit-pch -triple spir64-unknown-unknown
     -relocatable-pch -isysroot ${CMAKE_BINARY_DIR}/include/oclgrind/
     ${CMAKE_BINARY_DIR}/include/oclgrind/clc.h
-    -o include/oclgrind/clc1.2_64.pch
+    -o include/oclgrind/clc12_64.pch
   DEPENDS include/oclgrind/clc.h
 )
 add_custom_command(
-  OUTPUT include/oclgrind/clc2.0_32.pch
+  OUTPUT include/oclgrind/clc20_32.pch
   POST_BUILD
   COMMAND
     ${CLANG}
@@ -272,11 +272,11 @@ add_custom_command(
     -emit-pch -triple spir-unknown-unknown
     -relocatable-pch -isysroot ${CMAKE_BINARY_DIR}/include/oclgrind/
     ${CMAKE_BINARY_DIR}/include/oclgrind/clc.h
-    -o include/oclgrind/clc2.0_32.pch
+    -o include/oclgrind/clc20_32.pch
   DEPENDS include/oclgrind/clc.h
 )
 add_custom_command(
-  OUTPUT include/oclgrind/clc2.0_64.pch
+  OUTPUT include/oclgrind/clc20_64.pch
   POST_BUILD
   COMMAND
     ${CLANG}
@@ -284,7 +284,7 @@ add_custom_command(
     -emit-pch -triple spir64-unknown-unknown
     -relocatable-pch -isysroot ${CMAKE_BINARY_DIR}/include/oclgrind/
     ${CMAKE_BINARY_DIR}/include/oclgrind/clc.h
-    -o include/oclgrind/clc2.0_64.pch
+    -o include/oclgrind/clc20_64.pch
   DEPENDS include/oclgrind/clc.h
 )
 
