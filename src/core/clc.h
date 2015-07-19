@@ -42,6 +42,17 @@ TYPEDEF_VECTOR(ulong);
 TYPEDEF_VECTOR(float);
 TYPEDEF_VECTOR(double);
 
+typedef _Atomic(int)       atomic_int;
+typedef _Atomic(uint)      atomic_uint;
+typedef _Atomic(long)      atomic_long;
+typedef _Atomic(ulong)     atomic_ulong;
+typedef _Atomic(float)     atomic_float;
+typedef _Atomic(double)    atomic_double;
+typedef _Atomic(intptr_t)  atomic_intptr_t;
+typedef _Atomic(uintptr_t) atomic_uintptr_t;
+typedef _Atomic(size_t)    atomic_size_t;
+typedef _Atomic(ptrdiff_t) atomic_ptrdiff_t;
+
 #define __ENDIAN_LITTLE__ 1
 #define __OPENCL_VERSION__ 120
 #define __OPENCL_C_VERSION__ 120
