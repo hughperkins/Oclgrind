@@ -30,6 +30,7 @@ using namespace std;
 
 struct WorkItem::Position
 {
+  bool hasBegun;
   llvm::Function::const_iterator       prevBlock;
   llvm::Function::const_iterator       currBlock;
   llvm::Function::const_iterator       nextBlock;
@@ -105,6 +106,7 @@ WorkItem::WorkItem(const KernelInvocation *kernelInvocation,
   // Initialize interpreter state
   m_state    = READY;
   m_position = new Position;
+  m_position->hasBegun = false;
   m_position->prevBlock = NULL;
   m_position->nextBlock = NULL;
   m_position->currBlock = kernel->getFunction()->begin();
@@ -324,14 +326,14 @@ void WorkItem::execute(const llvm::Instruction *instruction)
   m_context->notifyInstructionExecuted(this, instruction, result);
 }
 
-TypedValue WorkItem::getValue(const llvm::Value *key) const
-{
-  return m_values[m_cache->getValueID(key)];
-}
-
 const stack<const llvm::Instruction*>& WorkItem::getCallStack() const
 {
   return m_position->callStack;
+}
+
+const llvm::BasicBlock* WorkItem::getCurrentBlock() const
+{
+  return m_position->currBlock;
 }
 
 const llvm::Instruction* WorkItem::getCurrentInstruction() const
@@ -442,6 +444,11 @@ TypedValue WorkItem::getOperand(const llvm::Value *operand) const
   assert(false);
 }
 
+const llvm::BasicBlock* WorkItem::getPreviousBlock() const
+{
+  return m_position->prevBlock;
+}
+
 Memory* WorkItem::getPrivateMemory() const
 {
   return m_privateMemory;
@@ -450,6 +457,11 @@ Memory* WorkItem::getPrivateMemory() const
 WorkItem::State WorkItem::getState() const
 {
   return m_state;
+}
+
+TypedValue WorkItem::getValue(const llvm::Value *key) const
+{
+  return m_values[m_cache->getValueID(key)];
 }
 
 const unsigned char* WorkItem::getValueData(const llvm::Value *value) const
@@ -463,13 +475,27 @@ const unsigned char* WorkItem::getValueData(const llvm::Value *value) const
 
 const llvm::Value* WorkItem::getVariable(std::string name) const
 {
+  // Check private variables
   VariableMap::const_iterator itr;
   itr = m_variables.find(name);
-  if (itr == m_variables.end())
+  if (itr != m_variables.end())
+    return itr->second;
+
+  // Check global variables
+  string globalName = m_position->currBlock->getParent()->getName();
+  globalName += ".";
+  globalName += name;
+  const llvm::Module *module =
+    m_kernelInvocation->getKernel()->getFunction()->getParent();
+  for (auto global = module->global_begin();
+            global != module->global_end();
+            global++)
   {
-    return NULL;
+    if (global->getName() == globalName)
+      return global;
   }
-  return itr->second;
+
+  return NULL;
 }
 
 const WorkGroup* WorkItem::getWorkGroup() const
@@ -504,18 +530,18 @@ bool WorkItem::printVariable(string name) const
   }
 
   // Get variable value
-  TypedValue result = getValue(value);
+  TypedValue result = getOperand(value);
   const llvm::Type *type = value->getType();
 
-  if (((const llvm::Instruction*)value)->getOpcode()
-       == llvm::Instruction::Alloca)
+  if (value->getValueID() == llvm::Value::GlobalVariableVal ||
+      ((const llvm::Instruction*)value)->getOpcode()
+         == llvm::Instruction::Alloca)
   {
-    // If value is alloca result, look-up data at address
-    const llvm::Type *elemType = value->getType()->getPointerElementType();
+    // If value is alloca or global variable, look-up data at address
     size_t address = result.getPointer();
-
-    unsigned char *data = (unsigned char*)m_privateMemory->getPointer(address);
-    printTypedData(elemType, data);
+    Memory *memory = getMemory(value->getType()->getPointerAddressSpace());
+    unsigned char *data = (unsigned char*)memory->getPointer(address);
+    printTypedData(value->getType()->getPointerElementType(), data);
   }
   else
   {
@@ -534,6 +560,12 @@ WorkItem::State WorkItem::step()
 {
   assert(m_state == READY);
 
+  if (!m_position->hasBegun)
+  {
+    m_position->hasBegun = true;
+    m_context->notifyWorkItemBegin(this);
+  }
+
   // Execute the next instruction
   execute(m_position->currInst);
 
@@ -550,6 +582,9 @@ WorkItem::State WorkItem::step()
       m_position->currInst  = m_position->currBlock->begin();
     }
   }
+
+  if (m_state == FINISHED)
+    m_context->notifyWorkItemComplete(this);
 
   return m_state;
 }
@@ -1194,7 +1229,6 @@ INSTRUCTION(ret)
     m_position->nextBlock = NULL;
     m_state = FINISHED;
     m_workGroup->notifyFinished(this);
-    m_context->notifyWorkItemComplete(this);
   }
 }
 
@@ -1379,7 +1413,11 @@ INSTRUCTION(uitofp)
   TypedValue op = getOperand(instruction->getOperand(0));
   for (unsigned i = 0; i < result.num; i++)
   {
-    result.setFloat(op.getUInt(i), i);
+    uint64_t in = op.getUInt(i);
+    if (result.size == 4)
+      result.setFloat(in ? (float)in : 0.f, i);
+    else
+      result.setFloat(in ? (double)in : 0.0, i);
   }
 }
 
@@ -1630,8 +1668,6 @@ bool InterpreterCache::hasValue(const llvm::Value *value) const
 
 void InterpreterCache::addOperand(const llvm::Value *operand)
 {
-  addValueID(operand);
-
   // Resolve constants
   if (operand->getValueID() == llvm::Value::UndefValueVal            ||
       operand->getValueID() == llvm::Value::ConstantAggregateZeroVal ||
@@ -1652,13 +1688,16 @@ void InterpreterCache::addOperand(const llvm::Value *operand)
     const llvm::ConstantExpr *expr = (const llvm::ConstantExpr*)operand;
     if (!m_constExpressions.count(expr))
     {
-      for (llvm::User::const_op_iterator O = expr->op_begin();
-           O != expr->op_end(); O++)
+      for (auto O = expr->op_begin(); O != expr->op_end(); O++)
       {
         addOperand(*O);
       }
       m_constExpressions[expr] = getConstExprAsInstruction(expr);
       // TODO: Resolve actual value?
     }
+  }
+  else
+  {
+    addValueID(operand);
   }
 }
