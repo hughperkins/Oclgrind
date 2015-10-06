@@ -921,6 +921,7 @@ size_t get_num_groups(uint dim);
 uint get_work_dim(void);
 size_t get_global_linear_id(void);
 size_t get_local_linear_id(void);
+size_t get_enqueued_local_size(uint dim);
 
 
 
