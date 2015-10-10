@@ -245,7 +245,7 @@ add_custom_command(
   POST_BUILD
   COMMAND
     ${CLANG}
-    -cc1 -x cl -cl-std=CL1.2 -O0 -g -fno-builtin
+    -cc1 -x cl -cl-std=CL1.2 -O0 -fno-builtin
     -emit-pch -triple spir-unknown-unknown
     -relocatable-pch -isysroot ${CMAKE_BINARY_DIR}/include/oclgrind/
     ${CMAKE_BINARY_DIR}/include/oclgrind/clc.h
@@ -257,7 +257,7 @@ add_custom_command(
   POST_BUILD
   COMMAND
     ${CLANG}
-    -cc1 -x cl -cl-std=CL1.2 -O0 -g -fno-builtin
+    -cc1 -x cl -cl-std=CL1.2 -O0 -fno-builtin
     -emit-pch -triple spir64-unknown-unknown
     -relocatable-pch -isysroot ${CMAKE_BINARY_DIR}/include/oclgrind/
     ${CMAKE_BINARY_DIR}/include/oclgrind/clc.h
@@ -269,7 +269,7 @@ add_custom_command(
   POST_BUILD
   COMMAND
     ${CLANG}
-    -cc1 -x cl -cl-std=CL2.0 -O0 -g -fno-builtin -fblocks
+    -cc1 -x cl -cl-std=CL2.0 -O0 -fno-builtin -fblocks
     -emit-pch -triple spir-unknown-unknown
     -relocatable-pch -isysroot ${CMAKE_BINARY_DIR}/include/oclgrind/
     ${CMAKE_BINARY_DIR}/include/oclgrind/clc.h
@@ -281,7 +281,7 @@ add_custom_command(
   POST_BUILD
   COMMAND
     ${CLANG}
-    -cc1 -x cl -cl-std=CL2.0 -O0 -g -fno-builtin -fblocks
+    -cc1 -x cl -cl-std=CL2.0 -O0 -fno-builtin -fblocks
     -emit-pch -triple spir64-unknown-unknown
     -relocatable-pch -isysroot ${CMAKE_BINARY_DIR}/include/oclgrind/
     ${CMAKE_BINARY_DIR}/include/oclgrind/clc.h
