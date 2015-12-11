@@ -2,6 +2,8 @@ os:
 - linux
 - osx
 
+sudo: required
+
 language: cpp
 compiler:
   - gcc

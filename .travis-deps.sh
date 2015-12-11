@@ -29,5 +29,5 @@ then
 elif [ "$TRAVIS_OS_NAME" == "osx" ]
 then
   # TODO
-  echo "TODO"
+  brew install llvm
 fi
