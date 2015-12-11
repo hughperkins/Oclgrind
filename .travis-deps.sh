@@ -28,9 +28,5 @@ then
   sudo apt-get install -qq libedit-dev
 elif [ "$TRAVIS_OS_NAME" == "osx" ]
 then
-  # TODO
-  brew update
-  brew search llvm
   brew install -v llvm --with-clang
-  ls /usr/local/Cellar/llvm
 fi
