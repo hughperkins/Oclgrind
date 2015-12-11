@@ -29,5 +29,8 @@ then
 elif [ "$TRAVIS_OS_NAME" == "osx" ]
 then
   # TODO
-  brew install llvm36 --with-clang
+  brew update
+  brew search llvm
+  brew install llvm --with-clang
+  ls /usr/local/Cellar/llvm
 fi
