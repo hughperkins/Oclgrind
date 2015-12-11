@@ -9,8 +9,8 @@ compiler:
 
 matrix:
   exclude:
-   - os: osx
-    compiler: gcc
+    - os: osx
+      compiler: gcc
 
 before_install:
   - ./.travis-deps.sh
