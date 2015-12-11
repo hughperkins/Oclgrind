@@ -18,6 +18,7 @@ before_install:
   - ./.travis-deps.sh
 
 script:
-  - cmake .
+  - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then cmake . ; fi
+  - if [ "${TRAVIS_OS_NAME}" = "osx" ]; then cmake . -DLLVM_DIR=/usr/local/Cellar/llvm/3.6.2/share/llvm/cmake ; fi
   - make -j 2
   - make test

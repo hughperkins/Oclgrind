@@ -31,6 +31,6 @@ then
   # TODO
   brew update
   brew search llvm
-  brew install llvm --with-clang
+  brew install -v llvm --with-clang
   ls /usr/local/Cellar/llvm
 fi
