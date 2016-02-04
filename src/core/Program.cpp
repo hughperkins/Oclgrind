@@ -6,7 +6,9 @@
 // license terms please see the LICENSE file distributed with this
 // source code.
 
+#include "config.h"
 #include "common.h"
+
 #include <fstream>
 
 #if defined(_WIN32) && !defined(__MINGW32__)
@@ -168,7 +170,8 @@ bool Program::build(const char *options, list<Header> headers)
     // Ignore options that break PCH
     if (strcmp(opt, "-cl-fast-relaxed-math") != 0 &&
         strcmp(opt, "-cl-finite-math-only") != 0 &&
-        strcmp(opt, "-cl-single-precision-constant") != 0)
+        strcmp(opt, "-cl-single-precision-constant") &&
+        strcmp(opt, "-cl-unsafe-math-optimizations") != 0)
     {
       // Check for optimization flags
       if (strcmp(opt, "-O0") == 0 || strcmp(opt, "-cl-opt-disable") == 0)
@@ -528,19 +531,28 @@ Program* Program::createFromPrograms(const Context *context,
 {
   llvm::Module *module = new llvm::Module("oclgrind_linked",
                                           llvm::getGlobalContext());
+#if LLVM_VERSION < 38
   llvm::Linker linker(module);
+#else
+  llvm::Linker linker(*module);
+#endif
 
   // Link modules
   list<const Program*>::iterator itr;
   for (itr = programs.begin(); itr != programs.end(); itr++)
   {
-    if (linker.linkInModule(CloneModule((*itr)->m_module.get())))
+#if LLVM_VERSION < 38
+    llvm::Module *m = llvm::CloneModule((*itr)->m_module.get());
+#else
+    unique_ptr<llvm::Module> m = llvm::CloneModule((*itr)->m_module.get());
+#endif
+    if (linker.linkInModule(std::move(m)))
     {
       return NULL;
     }
   }
 
-  return new Program(context, linker.getModule());
+  return new Program(context, module);
 }
 
 Kernel* Program::createKernel(const string name)
@@ -770,7 +782,8 @@ void Program::removeLValueLoads()
   set<llvm::StoreInst*> aggStores;
   for (llvm::Module::iterator F = m_module->begin(); F != m_module->end(); F++)
   {
-    for (llvm::inst_iterator I = inst_begin(F), E = inst_end(F); I != E; I++)
+    llvm::Function *f = &*F;
+    for (llvm::inst_iterator I = inst_begin(f), E = inst_end(f); I != E; I++)
     {
       if (auto store = llvm::dyn_cast<llvm::StoreInst>(&*I))
         aggStores.insert(store);
@@ -1035,7 +1048,8 @@ void Program::stripDebugIntrinsics()
   set<llvm::Instruction*> intrinsics;
   for (llvm::Module::iterator F = m_module->begin(); F != m_module->end(); F++)
   {
-    for (llvm::inst_iterator I = inst_begin(F), E = inst_end(F); I != E; I++)
+    llvm::Function *f = &*F;
+    for (llvm::inst_iterator I = inst_begin(f), E = inst_end(f); I != E; I++)
     {
       if (I->getOpcode() == llvm::Instruction::Call)
       {
